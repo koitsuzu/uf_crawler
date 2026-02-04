@@ -20,15 +20,19 @@ console = Console()
 
 class UfretCrawler:
     NEW_URL = "https://www.ufret.jp/new.php"
-    DB_GENERAL = "general_pipeline.json"
-    DB_VIDEO = "video_pipeline.json"
-    DB_PERMANENT = "followed_songs_db.json"
+    DATA_DIR = "data"
+    DB_GENERAL = os.path.join(DATA_DIR, "general_pipeline.json")
+    DB_VIDEO = os.path.join(DATA_DIR, "video_pipeline.json")
+    DB_PERMANENT = os.path.join(DATA_DIR, "followed_songs_db.json")
+    ARTISTS_FILE = os.path.join(DATA_DIR, "followed_artists.txt")
+    FAVORITES_FILE = os.path.join(DATA_DIR, "favorites.txt")
     
     def __init__(self):
+        if not os.path.exists(self.DATA_DIR): os.makedirs(self.DATA_DIR)
         self.headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
         self.lock = threading.RLock()
-        self.followed_artists = self.load_txt("followed_artists.txt")
-        self.favorite_urls = self.load_txt("favorites.txt")
+        self.followed_artists = self.load_txt(self.ARTISTS_FILE)
+        self.favorite_urls = self.load_txt(self.FAVORITES_FILE)
         self.db_general = self.load_json(self.DB_GENERAL)
         self.db_video = self.load_json(self.DB_VIDEO)
         self.db_perm = self.load_json(self.DB_PERMANENT)
@@ -105,8 +109,8 @@ class UfretCrawler:
         return unique
 
     async def scrape_all(self):
-        c_followed = self.load_txt("followed_artists.txt")
-        c_favs = self.load_txt("favorites.txt")
+        c_followed = self.load_txt(self.ARTISTS_FILE)
+        c_favs = self.load_txt(self.FAVORITES_FILE)
         with self.lock:
             self.followed_artists = c_followed
             self.favorite_urls = c_favs
@@ -182,7 +186,7 @@ class UfretCrawler:
                 self.favorite_urls.append(url)
                 if url not in self.db_perm:
                     self.db_perm[url] = song
-                self.save_txt("favorites.txt", self.favorite_urls)
+                self.save_txt(self.FAVORITES_FILE, self.favorite_urls)
                 self.save_json(self.DB_PERMANENT, self.db_perm)
             return song
 
@@ -598,10 +602,10 @@ def api_sync():
 def api_follow():
     artist = request.json.get("value")
     with crawler.lock:
-        c = crawler.load_txt("followed_artists.txt")
+        c = crawler.load_txt(crawler.ARTISTS_FILE)
         if artist not in c: c.append(artist)
         else: c.remove(artist)
-        crawler.save_txt("followed_artists.txt", c)
+        crawler.save_txt(crawler.ARTISTS_FILE, c)
         crawler.followed_artists = c
     return jsonify({"status": "success"})
 
@@ -609,14 +613,14 @@ def api_follow():
 def api_favorite():
     url = request.json.get("value")
     with crawler.lock:
-        c = crawler.load_txt("favorites.txt")
+        c = crawler.load_txt(crawler.FAVORITES_FILE)
         if url not in c: c.append(url)
         else: c.remove(url)
-        crawler.save_txt("favorites.txt", c)
+        crawler.save_txt(crawler.FAVORITES_FILE, c)
         crawler.favorite_urls = c
     return jsonify({"status": "success"})
 
 if __name__ == "__main__":
-    console.print("[bold white on black] U-FRETS PRO v18.0 [/bold white on black]")
+    console.print("[bold white on black] U-FRETS PRO v19.0 [/bold white on black]")
     threading.Thread(target=scheduler_thread, daemon=True).start()
     app.run(port=5000, debug=False)

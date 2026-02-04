@@ -1,7 +1,5 @@
-# 排除資料庫與暫存檔
-*.json
-results.html
-results.md
+# 排除動態資料與快取
+data/
 __pycache__/
 *.pyc
 .env
@@ -10,7 +8,5 @@ __pycache__/
 # 這裡列出的是「需要」上傳的 (不排除)
 !main.py
 !requirements.txt
-!followed_artists.txt
-!favorites.txt
 !README.md
 !.gitignore
