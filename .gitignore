@@ -1,6 +1,16 @@
-__pycache__/
-*.pyc
+# 排除資料庫與暫存檔
 *.json
 results.html
 results.md
+__pycache__/
+*.pyc
 .env
+.DS_Store
+
+# 這裡列出的是「需要」上傳的 (不排除)
+!main.py
+!requirements.txt
+!followed_artists.txt
+!favorites.txt
+!README.md
+!.gitignore
