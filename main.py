@@ -583,14 +583,14 @@ def utility_processor(): return dict(highlight=highlight, is_fav=is_fav)
 @app.route("/")
 def index():
     try:
-        # Check if there are any favorites without metadata in DB
+        # ASYNC CHECK: Trigger metadata fetching in background to avoid 502 timeout
         with crawler.lock:
-            missing_metadata = [url for url in crawler.favorite_urls if url not in crawler.db_perm]
+            missing = [url for url in crawler.favorite_urls if url not in crawler.db_perm]
         
-        if missing_metadata:
-            console.print(f"[yellow]Found {len(missing_metadata)} favorites with missing metadata. Fetching now...[/yellow]")
-            for url in missing_metadata:
-                run_add_url_sync(url)
+        if missing:
+            console.print(f"[yellow]Background fetching {len(missing)} favorites...[/yellow]")
+            for url in missing:
+                threading.Thread(target=run_add_url_sync, args=(url,), daemon=True).start()
         
         data = crawler.get_data_for_ui()
         data["general"].sort(key=lambda x: x.get("discovered_at", ""), reverse=True)
