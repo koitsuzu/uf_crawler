@@ -1,0 +1,4 @@
+flask
+httpx
+beautifulsoup4
+rich
