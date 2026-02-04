@@ -192,11 +192,19 @@ class UfretCrawler:
 
     def get_data_for_ui(self):
         with self.lock:
-            # Aggregate all known songs to find favorites
-            all_known = {**self.db_general, **self.db_video, **self.db_perm}
+            # Current feeds (New Arrivals + Video)
+            active_new = {**self.db_general, **self.db_video}
+            # Permanent pool (Historical followed songs, manually imported)
+            all_known = {**active_new, **self.db_perm}
             
-            raw_piano = [s for s in self.db_perm.values() if s.get("is_piano")]
-            raw_followed = [s for s in self.db_perm.values() if any(f.lower() in s.get("artist","").lower() for f in self.followed_artists)]
+            # 1. Piano: Only show from current new arrivals feeds to keep it fresh
+            raw_piano = [s for s in active_new.values() if s.get("is_piano")]
+            
+            # 2. Following: Only show songs by followed artists that were newly discovered in current feeds
+            # This ensures Following doesn't get cluttered with everything ever found.
+            raw_followed = [s for s in active_new.values() if any(f.lower() in s.get("artist","").lower() for f in self.followed_artists)]
+            
+            # 3. Favorites (Saved): The permanent list of things you explicitly want to keep.
             raw_favorites = [s for s in all_known.values() if s["url"] in self.favorite_urls]
 
             return {
@@ -633,11 +641,15 @@ def api_favorite():
 def api_add_url():
     url = request.json.get("url")
     if url: 
-        threading.Thread(target=run_add_url_sync, args=(url,)).start()
-    return jsonify({"status": "started"})
+        # For manual single import, we run synchronously so the user sees it immediately after reload
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(crawler.add_url_manually(url))
+        loop.close()
+    return jsonify({"status": "success"})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    console.print(f"[bold white on black] U-FRETS PRO v19.2.2 - PORT: {port} [/bold white on black]")
+    console.print(f"[bold white on black] U-FRETS PRO v19.4.0 - PORT: {port} [/bold white on black]")
     threading.Thread(target=scheduler_thread, daemon=True).start()
     app.run(host='0.0.0.0', port=port, debug=False)
