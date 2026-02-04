@@ -583,6 +583,15 @@ def utility_processor(): return dict(highlight=highlight, is_fav=is_fav)
 @app.route("/")
 def index():
     try:
+        # Check if there are any favorites without metadata in DB
+        with crawler.lock:
+            missing_metadata = [url for url in crawler.favorite_urls if url not in crawler.db_perm]
+        
+        if missing_metadata:
+            console.print(f"[yellow]Found {len(missing_metadata)} favorites with missing metadata. Fetching now...[/yellow]")
+            for url in missing_metadata:
+                run_add_url_sync(url)
+        
         data = crawler.get_data_for_ui()
         data["general"].sort(key=lambda x: x.get("discovered_at", ""), reverse=True)
         return render_template_string(HTML_TEMPLATE, data=data, 
@@ -620,7 +629,14 @@ def api_favorite():
         crawler.favorite_urls = c
     return jsonify({"status": "success"})
 
+@app.route("/api/add_url", methods=["POST"])
+def api_add_url():
+    url = request.json.get("url")
+    if url: 
+        threading.Thread(target=run_add_url_sync, args=(url,)).start()
+    return jsonify({"status": "started"})
+
 if __name__ == "__main__":
-    console.print("[bold white on black] U-FRETS PRO v19.0 [/bold white on black]")
+    console.print("[bold white on black] U-FRETS PRO v19.1.0 [/bold white on black]")
     threading.Thread(target=scheduler_thread, daemon=True).start()
     app.run(port=5000, debug=False)
