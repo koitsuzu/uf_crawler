@@ -637,6 +637,7 @@ def api_add_url():
     return jsonify({"status": "started"})
 
 if __name__ == "__main__":
-    console.print("[bold white on black] U-FRETS PRO v19.1.0 [/bold white on black]")
+    port = int(os.environ.get("PORT", 5000))
+    console.print(f"[bold white on black] U-FRETS PRO v19.2.2 - PORT: {port} [/bold white on black]")
     threading.Thread(target=scheduler_thread, daemon=True).start()
-    app.run(port=5000, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=False)
