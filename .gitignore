@@ -1,11 +1,15 @@
-# 排除動態資料與快取
-data/
+# 排除動態資料庫
+data/*.json
 __pycache__/
 *.pyc
 .env
-.DS_Store
 
-# 這裡列出的是「需要」上傳的 (不排除)
+# 允許上傳初始設定檔到 data 資料夾
+!data/
+!data/followed_artists.txt
+!data/favorites.txt
+
+# 核心程式
 !main.py
 !requirements.txt
 !README.md
