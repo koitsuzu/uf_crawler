@@ -78,7 +78,9 @@ class UfretCrawler:
         try:
             link_tag = item if item.name == "a" else item.find("a")
             if not link_tag: return None
-            url = urljoin(base_url, link_tag.get("href", ""))
+            href = link_tag.get("href", "")
+            if "song.php?data=" not in href: return None # 關鍵：排除非歌曲連結（如導覽鈕）
+            url = urljoin(base_url, href)
             
             badges = [t.text.strip() for t in item.select("span.badge")]
             artist_tag = item.find("span", style=lambda s: s and ("font-size:12px" in s or "font-size: 12px" in s))
@@ -96,11 +98,16 @@ class UfretCrawler:
                 else:
                     artist = "Unknown"
 
-            parts = [p.strip() for p in full_text.split("|||") if p.strip()]
-            clean_parts = [p for p in parts if p!=artist and p not in badges and "追加" not in p and "NEW" not in p and p!="U-リク" and p!="-"]
-            
-            raw_title = clean_parts[0] if clean_parts else "Unknown"
-            # If the title still contains the artist after a dash, clean it
+            # 2. 解析標題 (Title) - 優先讀取 <strong> 標籤 (針對 Piano Solo 頁面結構)
+            strong_tag = link_tag.find("strong")
+            if strong_tag:
+                raw_title = strong_tag.get_text().strip()
+            else:
+                parts = [p.strip() for p in full_text.split("|||") if p.strip()]
+                clean_parts = [p for p in parts if p!=artist and p not in badges and "追加" not in p and "NEW" not in p and p!="U-リク" and p!="-"]
+                raw_title = clean_parts[0] if clean_parts else "Unknown"
+
+            # 3. 如果標題內還殘留歌手（由連字號切分），再次清理
             if " - " in raw_title: raw_title = raw_title.split(" - ")[0].strip()
             
             clean_pattern = r"(U-リク|NEW|追加|初心者|動画プラス|ピアノソロ|ソロ|初級|\d{4}/\d{2}/\d{2})"
@@ -724,5 +731,5 @@ def api_add_url():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    console.print(f"[bold white on black] U-FRETS PRO v19.5.5 - PORT: {port} [/bold white on black]")
+    console.print(f"[bold white on black] U-FRETS PRO v19.5.6 - PORT: {port} [/bold white on black]")
     app.run(host='0.0.0.0', port=port, debug=False)
