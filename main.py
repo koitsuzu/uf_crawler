@@ -164,13 +164,7 @@ class UfretCrawler:
                 soup = BeautifulSoup(html_new, "html.parser")
                 items_new = soup.select("div.list-group a.list-group-item")[:100]
 
-            # 2. Scrape Piano Solo Page (Plan B)
-            html_p = await self.fetch_page(client, self.PIANO_URL)
-            items_p = []
-            if html_p:
-                items_p = BeautifulSoup(html_p, "html.parser").select("div.list-group a.list-group-item")[:30]
-
-            # 3. Scrape Piano Solo TAG Page (To get all 8+ historic songs)
+            # 2. Scrape Piano Solo TAG Page (The definitive source for the Piano tab)
             html_t = await self.fetch_page(client, self.PIANO_TAG_URL)
             items_t = []
             if html_t:
@@ -181,13 +175,13 @@ class UfretCrawler:
                 s = self.parse_song_item(item, self.NEW_URL)
                 if s: scraped_new.append(s)
 
-            # Process piano items and FORCE is_piano/is_piano_solo = True
+            # Process piano items and FORCE is_piano_solo = True
             scraped_piano = []
-            for item in items_p + items_t:
-                s = self.parse_song_item(item, self.PIANO_URL) # Use piano as base
+            for item in items_t:
+                s = self.parse_song_item(item, self.PIANO_TAG_URL)
                 if s:
                     s["is_piano"] = True
-                    s["is_piano_solo"] = True # v19.5.7 核心精選
+                    s["is_piano_solo"] = True # v19.5.8 官方標籤精選
                     scraped_piano.append(s)
 
             with self.lock:
@@ -197,11 +191,7 @@ class UfretCrawler:
 
                 new_gen, new_vid = [], []
                 for s in scraped_new:
-                    # 1. Archive ANY piano song to DB Permanent immediately
-                    if s["is_piano"]:
-                        self.db_perm[s["url"]] = s
-                    
-                    # 2. Add to Video pipeline if applicable
+                    # v19.5.8: 只有關注的歌手才會存入 db_perm，一般的鋼琴新曲留在 General 即可
                     if s["is_video"]:
                         new_vid.append(s)
                         continue
@@ -750,5 +740,5 @@ def api_add_url():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    console.print(f"[bold white on black] U-FRETS PRO v19.5.7 - PORT: {port} [/bold white on black]")
+    console.print(f"[bold white on black] U-FRETS PRO v19.5.8 - PORT: {port} [/bold white on black]")
     app.run(host='0.0.0.0', port=port, debug=False)
