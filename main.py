@@ -149,13 +149,19 @@ class UfretCrawler:
 
                 new_gen, new_vid = [], []
                 for s in scraped_new:
+                    # 1. Archive ANY piano song to DB Permanent immediately
                     if s["is_piano"]:
                         self.db_perm[s["url"]] = s
-                        continue
+                    
+                    # 2. Add to Video pipeline if applicable
                     if s["is_video"]:
                         new_vid.append(s)
                         continue
+                    
+                    # 3. Add to General pipeline (including Piano songs)
                     new_gen.append(s)
+                    
+                    # 4. If artist followed, archive to DB Permanent
                     if any(f.lower() in s["artist"].lower() for f in self.followed_artists):
                         self.db_perm[s["url"]] = s
                 
@@ -696,5 +702,5 @@ def api_add_url():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    console.print(f"[bold white on black] U-FRETS PRO v19.5.1 - PORT: {port} [/bold white on black]")
+    console.print(f"[bold white on black] U-FRETS PRO v19.5.2 - PORT: {port} [/bold white on black]")
     app.run(host='0.0.0.0', port=port, debug=False)
