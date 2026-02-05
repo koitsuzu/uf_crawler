@@ -21,7 +21,7 @@ console = Console()
 class UfretCrawler:
     NEW_URL = "https://www.ufret.jp/new.php"
     PIANO_URL = "https://www.ufret.jp/piano.php"
-    PIANO_TAG_URL = "https://www.ufret.jp/pickup.php?tag=%E3%83%94%E3%82%A2%E3%83%8E%E3%83%BD%E3%83%AD"
+    PIANO_TAG_URL = "https://www.ufret.jp/pickup.php?tag=%E3%83%94%E3%82%A2%E3%83%8E"
     DATA_DIR = "data"
     DB_GENERAL = os.path.join(DATA_DIR, "general_pipeline.json")
     DB_VIDEO = os.path.join(DATA_DIR, "video_pipeline.json")
@@ -711,5 +711,5 @@ def api_add_url():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    console.print(f"[bold white on black] U-FRETS PRO v19.5.3 - PORT: {port} [/bold white on black]")
+    console.print(f"[bold white on black] U-FRETS PRO v19.5.4 - PORT: {port} [/bold white on black]")
     app.run(host='0.0.0.0', port=port, debug=False)
