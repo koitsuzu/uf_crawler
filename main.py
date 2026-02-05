@@ -21,6 +21,7 @@ console = Console()
 class UfretCrawler:
     NEW_URL = "https://www.ufret.jp/new.php"
     PIANO_URL = "https://www.ufret.jp/piano.php"
+    PIANO_TAG_URL = "https://www.ufret.jp/pickup.php?tag=%E3%83%94%E3%82%A2%E3%83%8E%E3%83%BD%E3%83%AD"
     DATA_DIR = "data"
     DB_GENERAL = os.path.join(DATA_DIR, "general_pipeline.json")
     DB_VIDEO = os.path.join(DATA_DIR, "video_pipeline.json")
@@ -126,21 +127,29 @@ class UfretCrawler:
                 items_new = soup.select("div.list-group a.list-group-item")[:100]
 
             # 2. Scrape Piano Solo Page (Plan B)
-            html_piano = await self.fetch_page(client, self.PIANO_URL)
-            items_piano = []
-            if html_piano:
-                soup = BeautifulSoup(html_piano, "html.parser")
-                items_piano = soup.select("div.list-group a.list-group-item")[:30]
+            html_p = await self.fetch_page(client, self.PIANO_URL)
+            items_p = []
+            if html_p:
+                items_p = BeautifulSoup(html_p, "html.parser").select("div.list-group a.list-group-item")[:30]
+
+            # 3. Scrape Piano Solo TAG Page (To get all 8+ historic songs)
+            html_t = await self.fetch_page(client, self.PIANO_TAG_URL)
+            items_t = []
+            if html_t:
+                items_t = BeautifulSoup(html_t, "html.parser").select("div.list-group a.list-group-item")[:20]
 
             scraped_new = []
             for item in items_new:
                 s = self.parse_song_item(item, self.NEW_URL)
                 if s: scraped_new.append(s)
 
+            # Process piano items and FORCE is_piano = True
             scraped_piano = []
-            for item in items_piano:
-                s = self.parse_song_item(item, self.PIANO_URL)
-                if s: scraped_piano.append(s)
+            for item in items_p + items_t:
+                s = self.parse_song_item(item, self.PIANO_URL) # Use piano as base
+                if s:
+                    s["is_piano"] = True
+                    scraped_piano.append(s)
 
             with self.lock:
                 # Update DB Permanent with piano specific results
@@ -702,5 +711,5 @@ def api_add_url():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    console.print(f"[bold white on black] U-FRETS PRO v19.5.2 - PORT: {port} [/bold white on black]")
+    console.print(f"[bold white on black] U-FRETS PRO v19.5.3 - PORT: {port} [/bold white on black]")
     app.run(host='0.0.0.0', port=port, debug=False)
