@@ -39,6 +39,19 @@ class UfretCrawler:
         self.db_general = self.load_json(self.DB_GENERAL)
         self.db_video = self.load_json(self.DB_VIDEO)
         self.db_perm = self.load_json(self.DB_PERMANENT)
+        self.sanitize_database()
+
+    def sanitize_database(self):
+        """一次性清理資料庫中的 Unknown 歌手與無效連結"""
+        with self.lock:
+            initial_count = len(self.db_perm)
+            self.db_perm = {
+                url: s for url, s in self.db_perm.items() 
+                if s.get("artist") != "Unknown" and "song.php?data=" in url
+            }
+            if len(self.db_perm) != initial_count:
+                console.print(f"[yellow]Sanitized Database: Removed {initial_count - len(self.db_perm)} noise items.[/yellow]")
+                self.save_json(self.DB_PERMANENT, self.db_perm)
 
     def load_txt(self, fn):
         if not os.path.exists(fn): return []
@@ -117,7 +130,12 @@ class UfretCrawler:
             is_piano = any("ピアノ" in t for t in badges)
             is_video = any("動画" in t for t in badges)
 
-            return {"title": title, "artist": artist, "url": url, "tags": badges, "is_piano": is_piano, "is_video": is_video, "discovered_at": datetime.datetime.now().strftime("%Y-%m-%d")}
+            return {
+                "title": title, "artist": artist, "url": url, "tags": badges, 
+                "is_piano": is_piano, "is_video": is_video,
+                "is_piano_solo": False, # v19.5.7: 預設 False，僅精選區設為 True
+                "discovered_at": datetime.datetime.now().strftime("%Y-%m-%d")
+            }
         except: return None
 
     def deduplicate_songs(self, songs):
@@ -163,12 +181,13 @@ class UfretCrawler:
                 s = self.parse_song_item(item, self.NEW_URL)
                 if s: scraped_new.append(s)
 
-            # Process piano items and FORCE is_piano = True
+            # Process piano items and FORCE is_piano/is_piano_solo = True
             scraped_piano = []
             for item in items_p + items_t:
                 s = self.parse_song_item(item, self.PIANO_URL) # Use piano as base
                 if s:
                     s["is_piano"] = True
+                    s["is_piano_solo"] = True # v19.5.7 核心精選
                     scraped_piano.append(s)
 
             with self.lock:
@@ -252,8 +271,8 @@ class UfretCrawler:
             # Permanent pool (Historical followed songs, manually imported, and piano page cache)
             all_known = {**active_new, **self.db_perm}
             
-            # 1. Piano: From current feeds + specialized piano page results stored in db_perm
-            raw_piano = [s for s in all_known.values() if s.get("is_piano")]
+            # 1. Piano: 僅顯示標記為 is_piano_solo 的精選 (回歸 8 首經典)
+            raw_piano = [s for s in all_known.values() if s.get("is_piano_solo")]
             
             # 2. Following: Only show songs by followed artists that were newly discovered in current feeds
             raw_followed = [s for s in active_new.values() if any(f.lower() in s.get("artist","").lower() for f in self.followed_artists)]
@@ -731,5 +750,5 @@ def api_add_url():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    console.print(f"[bold white on black] U-FRETS PRO v19.5.6 - PORT: {port} [/bold white on black]")
+    console.print(f"[bold white on black] U-FRETS PRO v19.5.7 - PORT: {port} [/bold white on black]")
     app.run(host='0.0.0.0', port=port, debug=False)
