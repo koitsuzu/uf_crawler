@@ -26,6 +26,7 @@ class UfretCrawler:
     DB_PERMANENT = os.path.join(DATA_DIR, "followed_songs_db.json")
     ARTISTS_FILE = os.path.join(DATA_DIR, "followed_artists.txt")
     FAVORITES_FILE = os.path.join(DATA_DIR, "favorites.txt")
+    DB_LAST_SYNC = os.path.join(DATA_DIR, "last_sync.json")
     
     def __init__(self):
         if not os.path.exists(self.DATA_DIR): os.makedirs(self.DATA_DIR)
@@ -230,13 +231,40 @@ def run_add_url_sync(url):
     loop.close()
 
 def scheduler_thread():
-    console.print("[bold blue]Scheduler started...[/bold blue]")
+    console.print("[bold blue]Scheduler thread started...[/bold blue]")
+    
+    # Check if we need to catch up today's sync
+    now = datetime.datetime.now()
+    today_target = now.replace(hour=12, minute=0, second=0, microsecond=0)
+    
+    last_sync_data = crawler.load_json(crawler.DB_LAST_SYNC)
+    last_sync_date = last_sync_data.get("date", "")
+    today_str = now.strftime("%Y-%m-%d")
+    
+    # If it's already past 12:00 today and we haven't synced yet, do it now
+    if now >= today_target and last_sync_date != today_str:
+        console.print("[yellow]Detected missed sync for today. Catching up now...[/yellow]")
+        run_scrape_sync()
+        crawler.save_json(crawler.DB_LAST_SYNC, {"date": today_str})
+
     while True:
         now = datetime.datetime.now()
         target = now.replace(hour=12, minute=0, second=0, microsecond=0)
-        if now >= target: target += datetime.timedelta(days=1)
-        time.sleep((target-now).total_seconds())
+        if now >= target: 
+            target += datetime.timedelta(days=1)
+        
+        sleep_secs = (target - now).total_seconds()
+        console.print(f"[blue]Next scheduled sync at: {target}[/blue]")
+        time.sleep(max(0, sleep_secs))
+        
+        console.print("[bold green]Starting scheduled daily sync...[/bold green]")
         run_scrape_sync()
+        crawler.save_json(crawler.DB_LAST_SYNC, {"date": datetime.datetime.now().strftime("%Y-%m-%d")})
+
+# Start scheduler immediately on module load (ensures it runs under Gunicorn)
+if not hasattr(app, '_scheduler_started'):
+    app._scheduler_started = True
+    threading.Thread(target=scheduler_thread, daemon=True).start()
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -650,6 +678,5 @@ def api_add_url():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    console.print(f"[bold white on black] U-FRETS PRO v19.4.0 - PORT: {port} [/bold white on black]")
-    threading.Thread(target=scheduler_thread, daemon=True).start()
+    console.print(f"[bold white on black] U-FRETS PRO v19.5.0 - PORT: {port} [/bold white on black]")
     app.run(host='0.0.0.0', port=port, debug=False)
