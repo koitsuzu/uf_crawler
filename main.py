@@ -21,7 +21,7 @@ console = Console()
 class UfretCrawler:
     NEW_URL = "https://www.ufret.jp/new.php"
     PIANO_URL = "https://www.ufret.jp/piano.php"
-    PIANO_TAG_URL = "https://www.ufret.jp/pickup.php?tag=%E3%83%94%E3%82%A2%E3%83%8E"
+    PIANO_TAG_URL = "https://www.ufret.jp/pickup.php?tag=%E3%83%94%E3%82%A2%E3%83%8E%E3%82%BD%E3%83%AD"
     DATA_DIR = "data"
     DB_GENERAL = os.path.join(DATA_DIR, "general_pipeline.json")
     DB_VIDEO = os.path.join(DATA_DIR, "video_pipeline.json")
@@ -82,14 +82,27 @@ class UfretCrawler:
             
             badges = [t.text.strip() for t in item.select("span.badge")]
             artist_tag = item.find("span", style=lambda s: s and ("font-size:12px" in s or "font-size: 12px" in s))
-            artist = artist_tag.get_text().strip() if artist_tag else "Unknown"
-            if artist.startswith("-"): artist = artist[1:].strip()
-
+            
+            # Robust Artist Parsing
             full_text = link_tag.get_text("|||", strip=True)
+            if artist_tag:
+                artist = artist_tag.get_text().strip()
+                if artist.startswith("-"): artist = artist[1:].strip()
+            else:
+                # Try parsing from "Title - Artist" format (common on pickup pages)
+                clean_raw = link_tag.get_text().strip()
+                if " - " in clean_raw:
+                    artist = clean_raw.split(" - ")[-1].strip()
+                else:
+                    artist = "Unknown"
+
             parts = [p.strip() for p in full_text.split("|||") if p.strip()]
             clean_parts = [p for p in parts if p!=artist and p not in badges and "追加" not in p and "NEW" not in p and p!="U-リク" and p!="-"]
             
             raw_title = clean_parts[0] if clean_parts else "Unknown"
+            # If the title still contains the artist after a dash, clean it
+            if " - " in raw_title: raw_title = raw_title.split(" - ")[0].strip()
+            
             clean_pattern = r"(U-リク|NEW|追加|初心者|動画プラス|ピアノソロ|ソロ|初級|\d{4}/\d{2}/\d{2})"
             title = re.sub(clean_pattern, "", raw_title).strip().lstrip("-").strip()
             if not title: title = "Unknown Song"
@@ -136,7 +149,7 @@ class UfretCrawler:
             html_t = await self.fetch_page(client, self.PIANO_TAG_URL)
             items_t = []
             if html_t:
-                items_t = BeautifulSoup(html_t, "html.parser").select("div.list-group a.list-group-item")[:20]
+                items_t = BeautifulSoup(html_t, "html.parser").select("div.list-group a.list-group-item")[:50]
 
             scraped_new = []
             for item in items_new:
@@ -711,5 +724,5 @@ def api_add_url():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    console.print(f"[bold white on black] U-FRETS PRO v19.5.4 - PORT: {port} [/bold white on black]")
+    console.print(f"[bold white on black] U-FRETS PRO v19.5.5 - PORT: {port} [/bold white on black]")
     app.run(host='0.0.0.0', port=port, debug=False)
