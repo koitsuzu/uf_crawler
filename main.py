@@ -20,6 +20,7 @@ console = Console()
 
 class UfretCrawler:
     NEW_URL = "https://www.ufret.jp/new.php"
+    PIANO_URL = "https://www.ufret.jp/piano.php"
     DATA_DIR = "data"
     DB_GENERAL = os.path.join(DATA_DIR, "general_pipeline.json")
     DB_VIDEO = os.path.join(DATA_DIR, "video_pipeline.json")
@@ -117,19 +118,37 @@ class UfretCrawler:
             self.favorite_urls = c_favs
         
         async with httpx.AsyncClient() as client:
-            html = await self.fetch_page(client, self.NEW_URL)
-            if not html: return []
-            soup = BeautifulSoup(html, "html.parser")
-            items = soup.select("div.list-group a.list-group-item")
-            scraped = []
-            for i, item in enumerate(items):
-                if i>=100: break # Increased buffer to 100
+            # 1. Scrape New Releases
+            html_new = await self.fetch_page(client, self.NEW_URL)
+            items_new = []
+            if html_new:
+                soup = BeautifulSoup(html_new, "html.parser")
+                items_new = soup.select("div.list-group a.list-group-item")[:100]
+
+            # 2. Scrape Piano Solo Page (Plan B)
+            html_piano = await self.fetch_page(client, self.PIANO_URL)
+            items_piano = []
+            if html_piano:
+                soup = BeautifulSoup(html_piano, "html.parser")
+                items_piano = soup.select("div.list-group a.list-group-item")[:30]
+
+            scraped_new = []
+            for item in items_new:
                 s = self.parse_song_item(item, self.NEW_URL)
-                if s: scraped.append(s)
+                if s: scraped_new.append(s)
+
+            scraped_piano = []
+            for item in items_piano:
+                s = self.parse_song_item(item, self.PIANO_URL)
+                if s: scraped_piano.append(s)
 
             with self.lock:
+                # Update DB Permanent with piano specific results
+                for s in scraped_piano:
+                    self.db_perm[s["url"]] = s
+
                 new_gen, new_vid = [], []
-                for s in scraped:
+                for s in scraped_new:
                     if s["is_piano"]:
                         self.db_perm[s["url"]] = s
                         continue
@@ -195,14 +214,13 @@ class UfretCrawler:
         with self.lock:
             # Current feeds (New Arrivals + Video)
             active_new = {**self.db_general, **self.db_video}
-            # Permanent pool (Historical followed songs, manually imported)
+            # Permanent pool (Historical followed songs, manually imported, and piano page cache)
             all_known = {**active_new, **self.db_perm}
             
-            # 1. Piano: Only show from current new arrivals feeds to keep it fresh
-            raw_piano = [s for s in active_new.values() if s.get("is_piano")]
+            # 1. Piano: From current feeds + specialized piano page results stored in db_perm
+            raw_piano = [s for s in all_known.values() if s.get("is_piano")]
             
             # 2. Following: Only show songs by followed artists that were newly discovered in current feeds
-            # This ensures Following doesn't get cluttered with everything ever found.
             raw_followed = [s for s in active_new.values() if any(f.lower() in s.get("artist","").lower() for f in self.followed_artists)]
             
             # 3. Favorites (Saved): The permanent list of things you explicitly want to keep.
@@ -678,5 +696,5 @@ def api_add_url():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    console.print(f"[bold white on black] U-FRETS PRO v19.5.0 - PORT: {port} [/bold white on black]")
+    console.print(f"[bold white on black] U-FRETS PRO v19.5.1 - PORT: {port} [/bold white on black]")
     app.run(host='0.0.0.0', port=port, debug=False)
