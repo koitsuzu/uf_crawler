@@ -216,6 +216,7 @@ class UfretCrawler:
                 self.save_json(self.DB_VIDEO, self.db_video)
 
                 self.save_json(self.DB_PERMANENT, self.db_perm)
+            console.print(f"[bold green]Sync Successful: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}[/bold green]")
         return True
 
     async def add_url_manually(self, url):
@@ -293,35 +294,27 @@ def run_add_url_sync(url):
     loop.close()
 
 def scheduler_thread():
-    console.print("[bold blue]Scheduler thread started...[/bold blue]")
+    console.print("[bold blue]Hourly Scheduler thread started...[/bold blue]")
     
-    # Check if we need to catch up today's sync
-    now = datetime.datetime.now()
-    today_target = now.replace(hour=12, minute=0, second=0, microsecond=0)
-    
-    last_sync_data = crawler.load_json(crawler.DB_LAST_SYNC)
-    last_sync_date = last_sync_data.get("date", "")
-    today_str = now.strftime("%Y-%m-%d")
-    
-    # If it's already past 12:00 today and we haven't synced yet, do it now
-    if now >= today_target and last_sync_date != today_str:
-        console.print("[yellow]Detected missed sync for today. Catching up now...[/yellow]")
-        run_scrape_sync()
-        crawler.save_json(crawler.DB_LAST_SYNC, {"date": today_str})
-
     while True:
         now = datetime.datetime.now()
-        target = now.replace(hour=12, minute=0, second=0, microsecond=0)
-        if now >= target: 
-            target += datetime.timedelta(days=1)
+        # 1. 檢查是否需要執行 ( catch-up 邏輯：如果本小時尚未同步過 )
+        last_sync_data = crawler.load_json(crawler.DB_LAST_SYNC)
+        last_sync_hour = last_sync_data.get("hour", "")
+        current_hour_str = now.strftime("%Y-%m-%d %H:00")
         
-        sleep_secs = (target - now).total_seconds()
-        console.print(f"[blue]Next scheduled sync at: {target}[/blue]")
-        time.sleep(max(0, sleep_secs))
+        if last_sync_hour != current_hour_str:
+            console.print(f"[yellow]Current hour {current_hour_str} not synced yet. Starting sync...[/yellow]")
+            run_scrape_sync()
+            crawler.save_json(crawler.DB_LAST_SYNC, {"hour": current_hour_str})
         
-        console.print("[bold green]Starting scheduled daily sync...[/bold green]")
-        run_scrape_sync()
-        crawler.save_json(crawler.DB_LAST_SYNC, {"date": datetime.datetime.now().strftime("%Y-%m-%d")})
+        # 2. 計算下一個整點
+        next_hour = (now + datetime.timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+        sleep_secs = (next_hour - now).total_seconds()
+        
+        console.print(f"[blue]Next scheduled hourly sync at: {next_hour}[/blue]")
+        # 防止負值 sleep (雖然正常情況不會)
+        time.sleep(max(1, sleep_secs))
 
 # Start scheduler immediately on module load (ensures it runs under Gunicorn)
 if not hasattr(app, '_scheduler_started'):
@@ -605,6 +598,7 @@ HTML_TEMPLATE = """
             <button class="btn" onclick="show('followed', this)">Following <span style="opacity:0.6;font-size:0.9em;margin-left:4px;">{{ follow_count }}</span></button>
             <button class="btn" onclick="show('favorites', this)">Saved <span style="opacity:0.6;font-size:0.9em;margin-left:4px;">{{ fav_count }}</span></button>
             <button class="btn btn-sync" onclick="sync()">Sync Now</button>
+            <span id="last-sync-time" style="font-size: 0.85rem; color: var(--secondary-text); margin-left: 10px; font-weight: 500;">Last Sync: {{ last_sync }}</span>
         </div>
         
         {% macro card_macro(s) %}
@@ -692,12 +686,16 @@ def index():
         
         data = crawler.get_data_for_ui()
         data["general"].sort(key=lambda x: x.get("discovered_at", ""), reverse=True)
+        last_sync_data = crawler.load_json(crawler.DB_LAST_SYNC)
+        last_sync = last_sync_data.get("hour") or last_sync_data.get("date") or "Never"
+
         return render_template_string(HTML_TEMPLATE, data=data, 
                                      gen_count=len(data["general"]),
                                      video_count=len(data["video"]),
                                      piano_count=len(data["piano"]),
                                      follow_count=len(data["followed"]),
-                                     fav_count=len(data["favorites"]))
+                                     fav_count=len(data["favorites"]),
+                                     last_sync=last_sync)
     except Exception as e: return f"Error: {e}", 500
 
 @app.route("/api/sync", methods=["POST"])
@@ -740,5 +738,5 @@ def api_add_url():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    console.print(f"[bold white on black] U-FRETS PRO v19.5.8 - PORT: {port} [/bold white on black]")
+    console.print(f"[bold white on black] U-FRETS PRO v19.5.8.1 - PORT: {port} [/bold white on black]")
     app.run(host='0.0.0.0', port=port, debug=False)
